@@ -1,5 +1,6 @@
 import os
-import shutil
+import pickle
+import numpy as np
 
 # === Ép đường dẫn JAVA & SPARK ===
 os.environ["JAVA_HOME"] = r"C:\Program Files\Java\jdk-17"
@@ -26,14 +27,11 @@ def main():
 
     # 1) Đọc dữ liệu
     df = spark.read.csv("creditcard.csv", inferSchema=True, header=True)
-
-    # Đổi "Class" -> "label" cho Spark ML
     if "Class" not in df.columns:
         raise ValueError("Không thấy cột 'Class' trong creditcard.csv")
     df = df.withColumnRenamed("Class", "label")
 
     print("Total rows:", df.count())
-    df.printSchema()
     df.show(5)
 
     # 2) Chia 7/3
@@ -44,7 +42,6 @@ def main():
     # 3) VectorAssembler
     feature_cols = [c for c in df.columns if c != "label"]
     assembler = VectorAssembler(inputCols=feature_cols, outputCol="features")
-
     train_ml = assembler.transform(train).select("features", "label")
     test_ml = assembler.transform(test).select("features", "label")
 
@@ -52,27 +49,35 @@ def main():
     lr = LogisticRegression(featuresCol="features", labelCol="label", maxIter=1000)
     model = lr.fit(train_ml)
 
-    # 5) Đánh giá nhanh AUC
+    # 5) Đánh giá ROC-AUC & PR-AUC (chuẩn fraud)
     pred = model.transform(test_ml)
-    evaluator = BinaryClassificationEvaluator(labelCol="label", metricName="areaUnderROC")
-    auc = evaluator.evaluate(pred)
-    print("✅ AUC =", auc)
 
-    pred.select("label", "probability", "prediction").show(5, truncate=False)
+    roc_auc = BinaryClassificationEvaluator(
+        labelCol="label", rawPredictionCol="rawPrediction", metricName="areaUnderROC"
+    ).evaluate(pred)
 
-    # 6) Lưu artifacts (Spark lưu theo thư mục)
-    MODEL_DIR = "spark_lr_model"
-    ASSEMBLER_DIR = "spark_assembler"
+    pr_auc = BinaryClassificationEvaluator(
+        labelCol="label", rawPredictionCol="rawPrediction", metricName="areaUnderPR"
+    ).evaluate(pred)
 
-    for p in [MODEL_DIR, ASSEMBLER_DIR]:
-        if os.path.exists(p):
-            shutil.rmtree(p)
+    print("✅ ROC-AUC =", roc_auc)
+    print("✅ PR-AUC  =", pr_auc)
 
-    model.write().overwrite().save(MODEL_DIR)
-    assembler.write().overwrite().save(ASSEMBLER_DIR)
+    # 6) Lưu model kiểu sklearn (KHÔNG dùng Spark write().save() để tránh lỗi Windows)
+    coef = np.array(model.coefficients)   # length = số feature
+    intercept = float(model.intercept)
 
-    print(f"✅ Saved model to: {MODEL_DIR}")
-    print(f"✅ Saved assembler to: {ASSEMBLER_DIR}")
+    artifact = {
+        "feature_cols": feature_cols,
+        "coef": coef,
+        "intercept": intercept,
+        "threshold": 0.5,
+    }
+
+    with open("model.pkl", "wb") as f:
+        pickle.dump(artifact, f)
+
+    print("✅ Đã lưu model vào model.pkl (không dùng Spark save để tránh lỗi NativeIO trên Windows)")
 
     spark.stop()
 
