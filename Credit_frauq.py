@@ -7,6 +7,9 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, roc_auc_score
 from sklearn.preprocessing import StandardScaler
 
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 st.set_page_config(page_title="Fraud Detection (1 file)", layout="wide")
 st.title("🚨 Credit Card Fraud Detection — 1 file (train & predict in Streamlit)")
 
@@ -45,12 +48,12 @@ def random_from_meanstd(dfX: pd.DataFrame):
     return row
 
 # =========================
-# Upload + Train
+# Upload + Read
 # =========================
 uploaded = st.file_uploader("📤 Upload creditcard.csv", type=["csv"])
 
 if uploaded is None:
-    st.info("Hãy upload file creditcard.csv để train mô hình và dự đoán.")
+    st.info("Hãy upload file creditcard.csv để train mô hình và xem phân tích mô tả.")
     st.stop()
 
 df = pd.read_csv(uploaded)
@@ -68,7 +71,9 @@ st.caption(f"Tỉ lệ fraud: {fraud_n}/{len(y)} = {fraud_n/len(y)*100:.4f}%")
 with st.expander("Xem 5 dòng đầu"):
     st.dataframe(df.head(5), use_container_width=True)
 
-# Train parameters
+# =========================
+# Train parameters (sidebar)
+# =========================
 st.sidebar.header("⚙️ Train settings")
 test_size = st.sidebar.slider("Test size", 0.1, 0.5, 0.3, 0.05)
 C = st.sidebar.number_input("LogisticRegression C", value=1.0, min_value=0.0001, step=0.1, format="%.4f")
@@ -113,98 +118,175 @@ c1.metric("Accuracy (test)", f"{acc:.6f}")
 c2.metric("ROC-AUC (test)", f"{auc:.6f}" if auc is not None else "N/A")
 c3.metric("Z-score", "ON ✅" if use_zscore else "OFF ❌")
 
-st.markdown("---")
-st.subheader("🔮 Dự đoán 1 giao dịch")
+# =========================
+# Tabs
+# =========================
+tab1, tab2 = st.tabs(["🔮 Dự đoán giao dịch", "📊 Phân tích mô tả (3.3)"])
 
 # =========================
-# Input transaction (with random buttons)
+# TAB 1: Prediction (GIỮ NGUYÊN)
 # =========================
-if "tx" not in st.session_state:
-    st.session_state.tx = {c: 0.0 for c in feature_cols}
+with tab1:
+    st.subheader("🔮 Dự đoán 1 giao dịch")
 
-colA, colB = st.columns([2, 1])
+    if "tx" not in st.session_state:
+        st.session_state.tx = {c: 0.0 for c in feature_cols}
 
-with colB:
-    st.markdown("### 🎲 Tạo dữ liệu nhanh")
-    threshold = st.slider("Ngưỡng phân loại (threshold)", 0.05, 0.95, 0.5, 0.01)
+    colA, colB = st.columns([2, 1])
 
-    if st.button("🎯 Lấy ngẫu nhiên 1 dòng THẬT", use_container_width=True):
-        st.session_state.tx = random_from_dataset(X)
-        st.success("Đã lấy 1 giao dịch thật từ dataset!")
+    with colB:
+        st.markdown("### 🎲 Tạo dữ liệu nhanh")
+        threshold = st.slider("Ngưỡng phân loại (threshold)", 0.05, 0.95, 0.5, 0.01)
 
-    if st.button("🎲 Sinh ngẫu nhiên theo mean/std", use_container_width=True):
-        st.session_state.tx = random_from_meanstd(X)
-        st.success("Đã sinh ngẫu nhiên theo mean/std!")
+        if st.button("🎯 Lấy ngẫu nhiên 1 dòng THẬT", use_container_width=True):
+            st.session_state.tx = random_from_dataset(X)
+            st.success("Đã lấy 1 giao dịch thật từ dataset!")
 
-with colA:
-    st.markdown("### 🧾 Nhập giao dịch (có thể bấm random để tự điền)")
+        if st.button("🎲 Sinh ngẫu nhiên theo mean/std", use_container_width=True):
+            st.session_state.tx = random_from_meanstd(X)
+            st.success("Đã sinh ngẫu nhiên theo mean/std!")
 
-    # Hiển thị Time + Amount (nếu có)
-    if "Time" in feature_cols or "Amount" in feature_cols:
-        t1, t2 = st.columns(2)
-        if "Time" in feature_cols:
-            with t1:
-                st.session_state.tx["Time"] = st.number_input(
-                    "Time", value=float(st.session_state.tx.get("Time", 0.0))
-                )
-        if "Amount" in feature_cols:
-            with t2:
-                st.session_state.tx["Amount"] = st.number_input(
-                    "Amount", value=float(st.session_state.tx.get("Amount", 0.0))
-                )
+    with colA:
+        st.markdown("### 🧾 Nhập giao dịch (có thể bấm random để tự điền)")
 
-    # V1..V28 (nếu có)
-    vcols = [c for c in feature_cols if c.startswith("V")]
-    if vcols:
-        st.markdown("#### V1 ... V28")
-        for i in range(0, len(vcols), 4):
-            cols = st.columns(4)
-            for j, name in enumerate(vcols[i:i + 4]):
-                with cols[j]:
-                    st.session_state.tx[name] = st.number_input(
-                        name,
-                        value=float(st.session_state.tx.get(name, 0.0)),
-                        format="%.6f"
+        # Time + Amount
+        if "Time" in feature_cols or "Amount" in feature_cols:
+            t1, t2 = st.columns(2)
+            if "Time" in feature_cols:
+                with t1:
+                    st.session_state.tx["Time"] = st.number_input(
+                        "Time", value=float(st.session_state.tx.get("Time", 0.0))
                     )
-    else:
-        # fallback: nếu dataset không theo V1..V28 thì show tất cả columns
-        st.markdown("#### Các feature")
-        for i in range(0, len(feature_cols), 3):
-            cols = st.columns(3)
-            for j, name in enumerate(feature_cols[i:i + 3]):
-                with cols[j]:
-                    st.session_state.tx[name] = st.number_input(
-                        name,
-                        value=float(st.session_state.tx.get(name, 0.0))
+            if "Amount" in feature_cols:
+                with t2:
+                    st.session_state.tx["Amount"] = st.number_input(
+                        "Amount", value=float(st.session_state.tx.get("Amount", 0.0))
                     )
 
+        # V1..V28
+        vcols = [c for c in feature_cols if c.startswith("V")]
+        if vcols:
+            st.markdown("#### V1 ... V28")
+            for i in range(0, len(vcols), 4):
+                cols = st.columns(4)
+                for j, name in enumerate(vcols[i:i + 4]):
+                    with cols[j]:
+                        st.session_state.tx[name] = st.number_input(
+                            name,
+                            value=float(st.session_state.tx.get(name, 0.0)),
+                            format="%.6f"
+                        )
+        else:
+            st.markdown("#### Các feature")
+            for i in range(0, len(feature_cols), 3):
+                cols = st.columns(3)
+                for j, name in enumerate(feature_cols[i:i + 3]):
+                    with cols[j]:
+                        st.session_state.tx[name] = st.number_input(
+                            name,
+                            value=float(st.session_state.tx.get(name, 0.0))
+                        )
+
+    if st.button("🔮 Dự đoán", use_container_width=True):
+        x_input = np.array([[float(st.session_state.tx[c]) for c in feature_cols]], dtype=float)
+
+        if use_zscore and scaler is not None:
+            x_used = scaler.transform(x_input)
+        else:
+            x_used = x_input
+
+        pred = int(model.predict(x_used)[0])
+        proba = float(model.predict_proba(x_used)[0, 1])
+
+        st.markdown("---")
+        st.subheader("✅ Kết quả")
+        k1, k2, k3 = st.columns(3)
+        k1.metric("Fraud probability", f"{proba:.6f}")
+        k2.metric("Prediction", "Fraud (1) ❌" if pred == 1 else "Not Fraud (0) ✅")
+        k3.metric("Threshold", f"{threshold:.2f}")
+
+        if proba >= threshold:
+            st.error("⚠️ Giao dịch có khả năng gian lận.")
+        else:
+            st.success("✅ Giao dịch có khả năng bình thường.")
+
+        with st.expander("Xem lại dữ liệu giao dịch"):
+            st.dataframe(pd.DataFrame([st.session_state.tx])[feature_cols], use_container_width=True)
+
 # =========================
-# Predict
+# TAB 2: Descriptive analysis (CHỈ THU NHỎ HÌNH)
 # =========================
-if st.button("🔮 Dự đoán", use_container_width=True):
-    # đảm bảo đúng thứ tự feature
-    x_input = np.array([[float(st.session_state.tx[c]) for c in feature_cols]], dtype=float)
+with tab2:
+    st.subheader("📊 3.3 Phân tích mô tả")
 
-    # ✅ nếu dùng Z-score thì transform input giống lúc train
-    if use_zscore and scaler is not None:
-        x_used = scaler.transform(x_input)
+    # 1) Count Class
+    st.markdown("### 1) Biểu đồ cột đếm số lượng giao dịch hợp lệ và gian lận")
+    fig, ax = plt.subplots(figsize=(3.5, 2.8))
+    sns.countplot(x="Class", data=df, ax=ax)
+    ax.set_xlabel("Class (0: Hợp lệ, 1: Gian lận)")
+    ax.set_ylabel("Số lượng")
+    plt.tight_layout()
+    st.pyplot(fig)
+
+    # 2) Amount histogram by Class
+    st.markdown("### 2) Histogram phân bố Amount theo loại giao dịch (0/1)")
+    fig, ax = plt.subplots(figsize=(4, 3))
+    sns.histplot(df[df["Class"] == 0]["Amount"], bins=50, label="Hợp lệ (0)", alpha=0.6)
+    sns.histplot(df[df["Class"] == 1]["Amount"], bins=50, label="Gian lận (1)", alpha=0.6)
+    ax.set_xlabel("Amount")
+    ax.set_ylabel("Tần suất")
+    ax.legend()
+    plt.tight_layout()
+    st.pyplot(fig)
+
+    # 3) Time histogram by Class
+    st.markdown("### 3) Histogram phân bố Time theo loại giao dịch (0/1)")
+    fig, ax = plt.subplots(figsize=(4, 3))
+    sns.histplot(df[df["Class"] == 0]["Time"], bins=50, label="Hợp lệ (0)", alpha=0.6)
+    sns.histplot(df[df["Class"] == 1]["Time"], bins=50, label="Gian lận (1)", alpha=0.6)
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Tần suất")
+    ax.legend()
+    plt.tight_layout()
+    st.pyplot(fig)
+
+    # 4) Correlation matrix
+    st.markdown("### 4) Ma trận tương quan giữa các biến")
+    corr = df.corr(numeric_only=True)
+    fig, ax = plt.subplots(figsize=(5.5, 4))
+    sns.heatmap(corr, cmap="coolwarm", center=0, ax=ax)
+    plt.tight_layout()
+    st.pyplot(fig)
+
+    # 5) Correlation with Class (bar)
+    st.markdown("### 5) Bar chart tương quan giữa các biến và nhãn Class")
+    if "Class" in corr.columns:
+        corr_class = corr["Class"].drop("Class").sort_values(key=np.abs, ascending=False)
+        fig, ax = plt.subplots(figsize=(5.5, 4))
+        corr_class.plot(kind="bar", ax=ax)
+        ax.set_ylabel("Correlation with Class")
+        ax.set_xlabel("Features")
+        plt.tight_layout()
+        st.pyplot(fig)
     else:
-        x_used = x_input
+        st.warning("Không tìm thấy cột 'Class' trong ma trận tương quan.")
 
-    pred = int(model.predict(x_used)[0])
-    proba = float(model.predict_proba(x_used)[0, 1])
+    # 6) Amount histogram + KDE
+    st.markdown("### 6) Histogram + KDE cho Amount (toàn bộ dữ liệu)")
+    fig, ax = plt.subplots(figsize=(4, 3))
+    sns.histplot(df["Amount"], bins=50, kde=True, ax=ax)
+    ax.set_xlabel("Amount")
+    ax.set_ylabel("Tần suất")
+    plt.tight_layout()
+    st.pyplot(fig)
 
-    st.markdown("---")
-    st.subheader("✅ Kết quả")
-    k1, k2, k3 = st.columns(3)
-    k1.metric("Fraud probability", f"{proba:.6f}")
-    k2.metric("Prediction", "Fraud (1) ❌" if pred == 1 else "Not Fraud (0) ✅")
-    k3.metric("Threshold", f"{threshold:.2f}")
+    # 7) Boxplot Amount by Class
+    st.markdown("### 7) Boxplot so sánh Amount giữa Class=0 và Class=1")
+    fig, ax = plt.subplots(figsize=(3.5, 2.8))
+    sns.boxplot(x="Class", y="Amount", data=df, ax=ax)
+    ax.set_xlabel("Class (0: Hợp lệ, 1: Gian lận)")
+    ax.set_ylabel("Amount")
+    plt.tight_layout()
+    st.pyplot(fig)
 
-    if proba >= threshold:
-        st.error("⚠️ Giao dịch có khả năng gian lận.")
-    else:
-        st.success("✅ Giao dịch có khả năng bình thường.")
-
-    with st.expander("Xem lại dữ liệu giao dịch"):
-        st.dataframe(pd.DataFrame([st.session_state.tx])[feature_cols], use_container_width=True)
+    
