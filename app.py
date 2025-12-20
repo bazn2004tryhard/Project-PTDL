@@ -13,19 +13,18 @@ STAT_LIST_11 = [
 ]
 
 # ========== Helpers ==========
-def sigmoid(z: np.ndarray) -> np.ndarray:
-    # z-score giúp z đỡ bão hoà; vẫn clip cho an toàn
-    z = np.clip(z, -35, 35)
-    return 1.0 / (1.0 + np.exp(-z))
+def sigmoid(z: np.ndarray) -> np.ndarray: #khai báo hàm nhận vào 1 np array và trả về numpy array
+    z = np.clip(z, -35, 35) #giới hạn z nằm khỏng từ -35 đến 35 nếu < -35 thì trả về -35
+    return 1.0 / (1.0 + np.exp(-z)) # trả về 1 mảng chứa các số nằm từ 0 đến 1: 1/(1+ e^-z) z càng lớn càng gần 1
 
 def compute_descriptive_stats_11(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
-    X = df[cols].copy()
+    X = df[cols].copy() #copy các cột thành 1 df X
     for c in cols:
-        X[c] = pd.to_numeric(X[c], errors="coerce")
-    X = X.replace([np.inf, -np.inf], np.nan)
+        X[c] = pd.to_numeric(X[c], errors="coerce") #quy đổi tất cả về dạng số "3.5" = 3.5, "abc" = NaN, inf = inf
+    X = X.replace([np.inf, -np.inf], np.nan) #thay tất cả các số inf có trong X thành NaN
 
-    out = pd.DataFrame(index=cols)
-    out["count"] = X.count()
+    out = pd.DataFrame(index=cols) #tạo ra các dòng df có tiêu đề thuộc cols nhưng không có cột nào
+    out["count"] = X.count() # thêm cột "count"
     out["min"] = X.min()
     out["max"] = X.max()
 
@@ -39,38 +38,38 @@ def compute_descriptive_stats_11(df: pd.DataFrame, cols: list[str]) -> pd.DataFr
     out["stdev"] = X.std(ddof=1)
 
     def _mode_first(s: pd.Series):
-        m = s.mode(dropna=True)
-        return np.nan if len(m) == 0 else m.iloc[0]
+        m = s.mode(dropna=True) #tính mode và bỏ đi các giá trị NaN
+        return np.nan if len(m) == 0 else m.iloc[0] # trả về NaN nếu không có mode nào và trả về mode đầu tiên nếu có nhiều mode
 
-    out["mode"] = X.apply(_mode_first, axis=0)
-    return out[STAT_LIST_11]
+    out["mode"] = X.apply(_mode_first, axis=0)#lấy từng cột trong X và đư vào hàm
+    return out[STAT_LIST_11] #trả về df có thứ tự cột của biến STAT_LIST_11
 
-def plot_stat_bar(stats_df: pd.DataFrame, stat_name: str, top_n: int = 30):
-    s = stats_df[stat_name].copy().replace([np.inf, -np.inf], np.nan).dropna()
-    if len(s) > top_n:
-        s = s.reindex(s.abs().sort_values(ascending=False).head(top_n).index)
+def plot_stat_bar(stats_df: pd.DataFrame, stat_name: str, top_n: int = 30): #df cần vẽ, tên cột vẽ, số cột hiến thị
+    s = stats_df[stat_name].copy().replace([np.inf, -np.inf], np.nan).dropna() #lấy các cột cần vẽ, thay inf bằng NaN, loại bỏ giá trị khuyểt
+    if len(s) > top_n:#nếu top_n nhỏ hơn số hiện có
+        s = s.reindex(s.abs().sort_values(ascending=False).head(top_n).index)#chọn cột cần vẽ, lấy abs của từng giá trị sắp xếp giảm dần, lấy top_n index(tên cột) ra
 
-    fig, ax = plt.subplots()
-    ax.bar(s.index, s.values)
-    ax.set_title(f"{stat_name} (top {min(top_n, len(s))} features)")
-    ax.tick_params(axis="x", rotation=90)
-    st.pyplot(fig)
+    fig, ax = plt.subplots() #fig : cả khung vẽ, ax: các cấu hình khung vẽ
+    ax.bar(s.index, s.values) # cấu hình trục x là index("mean", "std", ...) và trục y là giá trị của s
+    ax.set_title(f"{stat_name} (top {min(top_n, len(s))} features)") # set tiêu đề cho khung vẽ
+    ax.tick_params(axis="x", rotation=90)# trục x xoay dọc 90 độ
+    st.pyplot(fig) # vẽ
 
 def plot_overview(stats_df: pd.DataFrame):
     # Normalize theo cột để heatmap dễ nhìn (mỗi stat scale khác nhau)
-    data = stats_df.copy().replace([np.inf, -np.inf], np.nan)
-    col_std = data.std(axis=0).replace(0, 1)
-    data = (data - data.mean(axis=0)) / col_std
-    data = data.fillna(0)
+    data = stats_df.copy().replace([np.inf, -np.inf], np.nan) # thay các giá trị inf thành NaN để xử lý
+    col_std = data.std(axis=0).replace(0, 1) # lấy std của cột, thay 0 thành 1 để tí dưới chia
+    data = (data - data.mean(axis=0)) / col_std #chuẩn háo z_Score
+    data = data.fillna(0) # thay các dòng có giá trị NaN thành 0
 
     fig, ax = plt.subplots(figsize=(12, 7))
-    im = ax.imshow(data.values, aspect="auto")
+    im = ax.imshow(data.values, aspect="auto")# vẽ biểu đồ heatmap, đầu vào là data dữ liệu mảng 2d, tỉ lệ tự căn
     ax.set_title("Overview (normalized) — 11 descriptive stats (V1..V28 x stats)")
-    ax.set_xticks(range(len(data.columns)))
+    ax.set_xticks(range(len(data.columns))) #cấu hình vị trí tên trục x (cấu hình hình vẽ)
     ax.set_xticklabels(data.columns, rotation=45, ha="right")
     ax.set_yticks(range(len(data.index)))
     ax.set_yticklabels(data.index)
-    fig.colorbar(im, ax=ax, fraction=0.02, pad=0.02)
+    fig.colorbar(im, ax=ax, fraction=0.02, pad=0.02)#faction: diện tích, pad: khoảng cách
     st.pyplot(fig)
 
 def random_transaction_from_meanstd(df_clean: pd.DataFrame, feature_cols: list[str]) -> dict:
@@ -79,10 +78,10 @@ def random_transaction_from_meanstd(df_clean: pd.DataFrame, feature_cols: list[s
     for c in feature_cols:
         mu = float(df_clean[c].mean())
         sd = float(df_clean[c].std(ddof=0))
-        if not np.isfinite(sd) or sd == 0:
+        if not np.isfinite(sd) or sd == 0: #kiểm tra nếu sd == 0 hoặc inf hoặc NaN
             row[c] = mu if np.isfinite(mu) else 0.0
         else:
-            v = float(np.random.normal(mu, sd))
+            v = float(np.random.normal(mu, sd)) # phân phối chuẩn trả về 1 số ngẫu nhiên chênh lệch so với mu k quá độ lệch chuẩn sd
             row[c] = 0.0 if not np.isfinite(v) else v
     return row
 
@@ -94,34 +93,34 @@ def preprocess_df(df: pd.DataFrame, feature_cols: list[str], label_candidates=("
     df.columns = [c.strip() for c in df.columns]
 
     label_col = None
-    for lc in label_candidates:
+    for lc in label_candidates: #nếu nhãn đầu vào label_candidates trùng tên với df.columns thì label_col = nhãn và break
         if lc in df.columns:
             label_col = lc
             break
 
-    if label_col == "Class":
+    if label_col == "Class": #nếu tên nhãn có tên là "Class" thfi đổi tên thành "label"
         df = df.rename(columns={"Class": "label"})
         label_col = "label"
 
-    for c in feature_cols:
+    for c in feature_cols: #nếu cột trong df bị thiếu thì thêm cột đấy và cho tất cả giá trọ = 0
         if c not in df.columns:
             df[c] = 0.0
 
-    for c in feature_cols:
+    for c in feature_cols: #chuyển tất cả dữ liệu sang dữ liệu số nếu không đc thì trả về NaN
         df[c] = pd.to_numeric(df[c], errors="coerce")
 
-    df[feature_cols] = df[feature_cols].replace([np.inf, -np.inf], np.nan).fillna(0.0)
+    df[feature_cols] = df[feature_cols].replace([np.inf, -np.inf], np.nan).fillna(0.0) # nếu có tồn tai inf thì thay bằng NaN sau đó thay tất cả NaN thành 0
 
     if label_col is not None and label_col in df.columns:
-        df[label_col] = pd.to_numeric(df[label_col], errors="coerce").fillna(0).astype(int)
+        df[label_col] = pd.to_numeric(df[label_col], errors="coerce").fillna(0).astype(int) # chuyển đổi hết về dạng số nếu gặp chữ thì chuyển về NaN, thay tất cả NaN = 0 và ép tất cả về int
 
     return df, label_col
 
 def preprocess_single_tx(tx: dict, feature_cols: list[str]) -> dict:
     clean = {}
     for c in feature_cols:
-        v = tx.get(c, 0.0)
-        try:
+        v = tx.get(c, 0.0) #nếu tx chưa tồn tại key c thì thêm vào và cho nó = 0
+        try: # đôit v thành float không đc thì set v = 0, nếu NaN thì không chạy catch
             v = float(v)
         except Exception:
             v = 0.0
@@ -133,45 +132,45 @@ def preprocess_single_tx(tx: dict, feature_cols: list[str]) -> dict:
 def apply_model_zscore(x: np.ndarray, z_mean: np.ndarray | None, z_std: np.ndarray | None) -> np.ndarray:
     if z_mean is None or z_std is None:
         return x
-    z_std_safe = np.where(z_std == 0, 1.0, z_std)
+    z_std_safe = np.where(z_std == 0, 1.0, z_std) #nếu z_std = 0 thì trả về 1
     return (x - z_mean) / z_std_safe
 
 def predict_prob(tx_clean: dict, feature_cols: list[str], coef: np.ndarray, intercept: float,
                  z_mean: np.ndarray | None, z_std: np.ndarray | None) -> float:
     x = np.array([tx_clean[c] for c in feature_cols], dtype=float)
-    x = apply_model_zscore(x, z_mean, z_std)  # ✅ z-score giống lúc train
-    return float(sigmoid(x @ coef + intercept))
+    x = apply_model_zscore(x, z_mean, z_std)  # z-score giống lúc train
+    return float(sigmoid(x @ coef + intercept)) # trả về số từ 0 đến 1 theo hàm sigmoid ở trên và lấy tích vô hướng x*coef + intercept
 
 # =========================
 #   Streamlit UI
 # =========================
-st.set_page_config(page_title="Fraud Detection", layout="wide")
-st.title("🚨 Credit Card Fraud Detection")
+st.set_page_config(page_title="Fraud Detection", layout="wide") # thay đổi tiêu đề tab và chọn layout toàn chiều ngang
+st.title("🚨 Credit Card Fraud Detection") #set title tiêu đề lớn nhất của trang
 
 # ===== Load model.pkl =====
 try:
     with open("model.pkl", "rb") as f:
-        artifact = pickle.load(f)
+        artifact = pickle.load(f) #load file model.plk chứa coef, intercepter z_mean, z_std ...
 except FileNotFoundError:
     st.error("❌ Không thấy model.pkl. Hãy chạy: python train_spark.py trước để tạo model.pkl")
     st.stop()
 
-feature_cols: list[str] = artifact["feature_cols"]
-coef: np.ndarray = np.asarray(artifact["coef"], dtype=float)
-intercept: float = float(artifact["intercept"])
+feature_cols: list[str] = artifact["feature_cols"] # lấy các tên cột ra lưu lại và biến có kiểu list[str]
+coef: np.ndarray = np.asarray(artifact["coef"], dtype=float) # lấy coef và chuyển sang np
+intercept: float = float(artifact["intercept"]) #lấy intercepter ra
 
-z_mean = np.asarray(artifact.get("z_mean"), dtype=float) if artifact.get("z_mean") is not None else None
-z_std = np.asarray(artifact.get("z_std"), dtype=float) if artifact.get("z_std") is not None else None
-trained_on_zscore = bool(artifact.get("trained_on_zscore", False))
-metrics = artifact.get("metrics", {})
+z_mean = np.asarray(artifact.get("z_mean"), dtype=float) if artifact.get("z_mean") is not None else None #nếu artifact.get("z_mean") tồn tại thì lấy ra không thì trả về None 
+z_std = np.asarray(artifact.get("z_std"), dtype=float) if artifact.get("z_std") is not None else None #tương tự
+trained_on_zscore = bool(artifact.get("trained_on_zscore", False)) #lấy trained_on_zscore nếu không tồn tại thì trả về false
+metrics = artifact.get("metrics", {}) # lấy metric đã tính toán nếu không có trả về {}
 
 st.caption(
     f"Model: Logistic Regression | train_zscore={trained_on_zscore} | "
     f"ROC-AUC={metrics.get('roc_auc','?')} | PR-AUC={metrics.get('pr_auc','?')}"
-)
+) #hiển thị nội dung caption dưới tiêu đề
 
-st.sidebar.header("📌 Menu")
-mode = st.sidebar.radio("Chọn chức năng", ["🔮 Dự đoán 1 giao dịch", "📊 Phân tích mô tả (11 độ đo)"])
+st.sidebar.header("📌 Menu") # tiêu đề trên sidebar
+mode = st.sidebar.radio("Chọn chức năng", ["🔮 Dự đoán 1 giao dịch", "📊 Phân tích mô tả (11 độ đo)"]) #tạo button các lựa chọn 
 
 # ========== 1) Prediction ==========
 if mode == "🔮 Dự đoán 1 giao dịch":
@@ -192,18 +191,18 @@ if mode == "🔮 Dự đoán 1 giao dịch":
 
         if label_col is not None:
             n = len(df_up)
-            fraud_n = int((df_up[label_col] == 1).sum())
-            st.info(f"Dataset: {n} rows | fraud={fraud_n} ({fraud_n/n*100:.3f}%)")
+            fraud_n = int((df_up[label_col] == 1).sum()) #số giao dịch có label = 1
+            st.info(f"Dataset: {n} rows | fraud={fraud_n} ({fraud_n/n*100:.3f}%)") #set hiển thị banner màu xanh
 
         with st.expander("Xem nhanh dataset upload (5 dòng đầu)"):
             st.dataframe(df_up.head(5), use_container_width=True)
 
-    if "tx" not in st.session_state:
+    if "tx" not in st.session_state: #nếu thuộc tính tx chưa tồn tại trong st.session_state thì khởi tạo tất =0
         st.session_state.tx = {c: 0.0 for c in feature_cols}
 
-    colA, colB = st.columns([2, 1])
+    colA, colB = st.columns([2, 1]) #chia làm 2phaanf giao diện phần 1 chiếm 2 phần , phần 2 chiếm 1 phần
 
-    with colB:
+    with colB: # tạo giao diện cho phần thứ 2
         st.markdown("### ⚙️ Hành động")
         threshold = st.slider(
             "Ngưỡng phân loại (threshold)",
@@ -251,16 +250,16 @@ if mode == "🔮 Dự đoán 1 giao dịch":
                         non_df = df_up[df_up[label_col] == 0]
                         if len(fraud_df) == 0 or len(non_df) == 0:
                             st.warning("Thiếu fraud hoặc non-fraud trong dataset.")
-                        else:
+                        else: 
                             sample_df = pd.concat(
                                 [fraud_df.sample(5, replace=len(fraud_df) < 5),
                                  non_df.sample(5, replace=len(non_df) < 5)],
                                 ignore_index=True
-                            )
+                            )#nối 2 df với nhau lấy mỗi bên 5, nếu chưa đủ 5 thì tiếp tục lấy cho phép lặp
                             for _, r in sample_df.iterrows():
                                 tx = {c: float(r[c]) for c in feature_cols}
                                 p = predict_prob(tx, feature_cols, coef, intercept, z_mean, z_std)
-                                rows.append({"prob": p, "pred": int(p >= threshold), "true_label": int(r[label_col])})
+                                rows.append({"prob": p, "pred": int(p >= threshold), "true_label": int(r[label_col])}) #đưa ra kết quả làm tròn theo threshold
                 else:
                     if df_up is None:
                         st.warning("Upload dataset để random mean/std 'đúng phân phối' hơn.")
