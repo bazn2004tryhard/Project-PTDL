@@ -6,10 +6,11 @@ import matplotlib.pyplot as plt
 
 # =========================
 #   11 DESCRIPTIVE STATS
+#   (Thêm mean, bỏ Q2 vì Q2 = median)
 # =========================
 STAT_LIST_11 = [
-    "count", "min", "max", "median", "mode",
-    "Q1", "Q2", "Q3", "IQR", "variance", "stdev",
+    "count", "min", "max", "mean", "median", "mode",
+    "Q1", "Q3", "IQR", "variance", "stdev",
 ]
 
 # ========== Helpers ==========
@@ -29,9 +30,9 @@ def compute_descriptive_stats_11(df: pd.DataFrame, cols: list[str]) -> pd.DataFr
     out["min"] = X.min()
     out["max"] = X.max()
 
+    out["mean"] = X.mean()
     out["median"] = X.median()
     out["Q1"] = X.quantile(0.25)
-    out["Q2"] = X.quantile(0.50)
     out["Q3"] = X.quantile(0.75)
     out["IQR"] = out["Q3"] - out["Q1"]
 
@@ -43,6 +44,8 @@ def compute_descriptive_stats_11(df: pd.DataFrame, cols: list[str]) -> pd.DataFr
         return np.nan if len(m) == 0 else m.iloc[0]
 
     out["mode"] = X.apply(_mode_first, axis=0)
+
+    # Trả về đúng thứ tự 11 độ đo
     return out[STAT_LIST_11]
 
 def plot_stat_bar(stats_df: pd.DataFrame, stat_name: str, top_n: int = 30):
@@ -176,7 +179,6 @@ mode = st.sidebar.radio("Chọn chức năng", ["🔮 Dự đoán 1 giao dịch"
 # ========== 1) Prediction ==========
 if mode == "🔮 Dự đoán 1 giao dịch":
     st.subheader("🔮 Dự đoán 1 giao dịch có gian lận hay không")
-    st.write("⚠️ Fraud cực hiếm → bạn random 10 giao dịch THẬT mà toàn Not Fraud là **bình thường**.")
 
     uploaded = st.file_uploader(
         "📤 Upload creditcard.csv (để lấy giao dịch thật / fraud thật / random theo mean-std)",
@@ -282,10 +284,14 @@ if mode == "🔮 Dự đoán 1 giao dịch":
                 c1, c2 = st.columns(2)
                 if "Time" in feature_cols:
                     with c1:
-                        st.session_state.tx["Time"] = st.number_input("Time", value=float(st.session_state.tx.get("Time", 0.0)))
+                        st.session_state.tx["Time"] = st.number_input(
+                            "Time", value=float(st.session_state.tx.get("Time", 0.0))
+                        )
                 if "Amount" in feature_cols:
                     with c2:
-                        st.session_state.tx["Amount"] = st.number_input("Amount", value=float(st.session_state.tx.get("Amount", 0.0)))
+                        st.session_state.tx["Amount"] = st.number_input(
+                            "Amount", value=float(st.session_state.tx.get("Amount", 0.0))
+                        )
 
             st.markdown("#### V1 ... V28")
             vcols = [c for c in feature_cols if c.startswith("V")]
